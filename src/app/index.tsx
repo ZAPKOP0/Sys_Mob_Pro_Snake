@@ -31,6 +31,7 @@ export default function Home() {
   const [bestScore, setBestScore] = useState(0);
 
   const intervalRef = useRef<any>(null);
+  const foodTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
     if (gameOver || !isGameStarted) return;
@@ -47,23 +48,26 @@ export default function Home() {
   }
 
   async function loadBestScore(name: string) {
-    const key = `bestScore_${name}`;
-    const stored = await AsyncStorage.getItem(key);
-    setBestScore(stored ? parseInt(stored) : 0);
+    try {
+      const key = `bestScore_${name}`;
+      const stored = await AsyncStorage.getItem(key);
+      setBestScore(stored ? parseInt(stored) : 0);
+    } catch {}
   }
 
   async function saveBestScore(newScore: number) {
-    const key = `bestScore_${playerName}`;
-    const stored = await AsyncStorage.getItem(key);
+    try {
+      const key = `bestScore_${playerName}`;
+      const stored = await AsyncStorage.getItem(key);
+      const currentBest = stored ? parseInt(stored) : 0;
 
-    const currentBest = stored ? parseInt(stored) : 0;
-
-    if (newScore > currentBest) {
-      await AsyncStorage.setItem(key, newScore.toString());
-      setBestScore(newScore);
-    } else {
-      setBestScore(currentBest);
-    }
+      if (newScore > currentBest) {
+        await AsyncStorage.setItem(key, newScore.toString());
+        setBestScore(newScore);
+      } else {
+        setBestScore(currentBest);
+      }
+    } catch {}
   }
 
   function update() {
@@ -91,9 +95,18 @@ export default function Home() {
 
     let newSnake = [head, ...snake];
 
-    if (head.x === food.x && head.y === food.y) {
+    if (food && head.x === food.x && head.y === food.y) {
       setScore((prev) => prev + 1);
-      setFood(spawnFood());
+      setFood(null);
+
+      if (foodTimeoutRef.current) {
+        clearTimeout(foodTimeoutRef.current);
+      }
+
+      foodTimeoutRef.current = setTimeout(() => {
+        setFood(spawnFood());
+      }, 3000);
+
     } else {
       newSnake.pop();
     }
@@ -103,21 +116,29 @@ export default function Home() {
 
   function endGame() {
     clearInterval(intervalRef.current);
+
+    if (foodTimeoutRef.current) {
+      clearTimeout(foodTimeoutRef.current);
+    }
+
     setGameOver(true);
     saveBestScore(score);
   }
 
   function resetGame() {
+    clearInterval(intervalRef.current);
+
+    if (foodTimeoutRef.current) {
+      clearTimeout(foodTimeoutRef.current);
+    }
+
     setSnake(START_SNAKE);
     setFood(spawnFood());
     setScore(0);
     setDirection("RIGHT");
     setGameOver(false);
-
     setIsGameStarted(false);
-    setPlayerName(playerName);
   }
-
 
   if (!isGameStarted) {
     return (
@@ -167,16 +188,18 @@ export default function Home() {
           />
         ))}
 
-        <View
-          style={[
-            styles.cell,
-            {
-              left: food.x * BOX,
-              top: food.y * BOX,
-              backgroundColor: "red",
-            },
-          ]}
-        />
+        {food && (
+          <View
+            style={[
+              styles.cell,
+              {
+                left: food.x * BOX,
+                top: food.y * BOX,
+                backgroundColor: "red",
+              },
+            ]}
+          />
+        )}
 
         {gameOver && (
           <View style={styles.gameOverOverlay}>
@@ -231,7 +254,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   board: {
     width: BOX * SIZE,
     height: BOX * SIZE,
@@ -241,41 +263,35 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     overflow: "hidden",
   },
-
   cell: {
     width: BOX,
     height: BOX,
     position: "absolute",
     borderRadius: 4,
   },
-
   score: {
     color: "white",
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 5,
   },
-
   gameOverOverlay: {
     position: "absolute",
     width: "100%",
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "black",
   },
-
   gameOver: {
     color: "red",
     fontSize: 36,
     fontWeight: "bold",
   },
-
   controls: {
     marginTop: 25,
     alignItems: "center",
   },
-
   arrowButton: {
     width: 65,
     height: 65,
@@ -287,13 +303,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#444",
   },
-
   arrowText: {
     color: "white",
     fontSize: 34,
     fontWeight: "bold",
   },
-
   resetButton: {
     marginTop: 18,
     backgroundColor: "#111",
@@ -303,13 +317,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#444",
   },
-
   resetText: {
     color: "white",
     fontSize: 18,
     fontWeight: "bold",
   },
-
   input: {
     width: 220,
     height: 50,
