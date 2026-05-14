@@ -4,7 +4,9 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  TextInput,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const SIZE = 20;
 const BOX = 18;
@@ -19,27 +21,49 @@ const START_SNAKE = [
 
 export default function Home() {
   const [snake, setSnake] = useState(START_SNAKE);
-
   const [food, setFood] = useState(spawnFood());
   const [direction, setDirection] = useState("RIGHT");
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
 
+  const [playerName, setPlayerName] = useState("");
+  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [bestScore, setBestScore] = useState(0);
+
   const intervalRef = useRef<any>(null);
 
   useEffect(() => {
-    if (gameOver) return;
+    if (gameOver || !isGameStarted) return;
 
     intervalRef.current = setInterval(update, 200);
-
     return () => clearInterval(intervalRef.current);
-  }, [snake, direction, gameOver]);
+  }, [snake, direction, gameOver, isGameStarted]);
 
   function spawnFood() {
     return {
       x: Math.floor(Math.random() * SIZE),
       y: Math.floor(Math.random() * SIZE),
     };
+  }
+
+  async function loadBestScore(name: string) {
+    const key = `bestScore_${name}`;
+    const stored = await AsyncStorage.getItem(key);
+    setBestScore(stored ? parseInt(stored) : 0);
+  }
+
+  async function saveBestScore(newScore: number) {
+    const key = `bestScore_${playerName}`;
+    const stored = await AsyncStorage.getItem(key);
+
+    const currentBest = stored ? parseInt(stored) : 0;
+
+    if (newScore > currentBest) {
+      await AsyncStorage.setItem(key, newScore.toString());
+      setBestScore(newScore);
+    } else {
+      setBestScore(currentBest);
+    }
   }
 
   function update() {
@@ -50,7 +74,6 @@ export default function Home() {
     if (direction === "UP") head.y--;
     if (direction === "DOWN") head.y++;
 
-    // Kolizja ze ścianą
     if (
       head.x < 0 ||
       head.y < 0 ||
@@ -61,7 +84,6 @@ export default function Home() {
       return;
     }
 
-    // Kolizja z samym sobą
     if (snake.some((s) => s.x === head.x && s.y === head.y)) {
       endGame();
       return;
@@ -69,9 +91,8 @@ export default function Home() {
 
     let newSnake = [head, ...snake];
 
-    // Zjedzenie jedzenia
     if (head.x === food.x && head.y === food.y) {
-      setScore(score + 1);
+      setScore((prev) => prev + 1);
       setFood(spawnFood());
     } else {
       newSnake.pop();
@@ -83,6 +104,7 @@ export default function Home() {
   function endGame() {
     clearInterval(intervalRef.current);
     setGameOver(true);
+    saveBestScore(score);
   }
 
   function resetGame() {
@@ -91,10 +113,43 @@ export default function Home() {
     setScore(0);
     setDirection("RIGHT");
     setGameOver(false);
+
+    setIsGameStarted(false);
+    setPlayerName(playerName);
+  }
+
+
+  if (!isGameStarted) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.score}>Podaj swoje imię</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Twoje imię"
+          placeholderTextColor="#aaa"
+          value={playerName}
+          onChangeText={setPlayerName}
+        />
+
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={() => {
+            if (playerName.trim().length === 0) return;
+            loadBestScore(playerName);
+            setIsGameStarted(true);
+          }}
+        >
+          <Text style={styles.resetText}>Start</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
+      <Text style={styles.score}>Gracz: {playerName}</Text>
+      <Text style={styles.score}>Best: {bestScore}</Text>
       <Text style={styles.score}>Score: {score}</Text>
 
       <View style={styles.board}>
@@ -143,7 +198,7 @@ export default function Home() {
             style={styles.arrowButton}
             onPress={() => !gameOver && setDirection("LEFT")}
           >
-            <Text style={styles.arrowText}>"<-"</Text>
+            <Text style={styles.arrowText}>←</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -161,10 +216,7 @@ export default function Home() {
           <Text style={styles.arrowText}>↓</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.resetButton}
-          onPress={resetGame}
-        >
+        <TouchableOpacity style={styles.resetButton} onPress={resetGame}>
           <Text style={styles.resetText}>Nowa gra</Text>
         </TouchableOpacity>
       </View>
@@ -199,9 +251,9 @@ const styles = StyleSheet.create({
 
   score: {
     color: "white",
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: 5,
   },
 
   gameOverOverlay: {
@@ -256,5 +308,15 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 18,
     fontWeight: "bold",
+  },
+
+  input: {
+    width: 220,
+    height: 50,
+    backgroundColor: "white",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    fontSize: 18,
+    marginBottom: 15,
   },
 });
